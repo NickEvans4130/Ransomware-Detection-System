@@ -17,6 +17,10 @@
         "file_extension_filter": [],
         "recursive": true
     },
+    "entropy": {
+        "baseline_db_path": "data/entropy_baselines.db",
+        "delta_threshold": 2.0
+    },
     "database": {
         "path": "data/events.db"
     },
