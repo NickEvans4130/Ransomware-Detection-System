@@ -1,0 +1,26 @@
+{
+    "monitor": {
+        "watch_directories": [
+            "~/Documents",
+            "~/Desktop",
+            "~/Downloads"
+        ],
+        "exclude_directories": [
+            "/proc",
+            "/sys",
+            "/dev",
+            "/run",
+            "__pycache__",
+            ".git",
+            "node_modules"
+        ],
+        "file_extension_filter": [],
+        "recursive": true
+    },
+    "database": {
+        "path": "data/events.db"
+    },
+    "logging": {
+        "level": "INFO"
+    }
+}
