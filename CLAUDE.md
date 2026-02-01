@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Run `git fetch origin` and ensure the branch is up to date before committing.
 - Commit with a concise, relevant message. No emojis, no Claude attribution (no "Co-Authored-By" lines).
 - Push the branch to origin after committing.
+- After pushing, merge the feature branch into main and push main.
 - No emojis anywhere: not in commits, not in code, not in documentation.
 
 ## Project
