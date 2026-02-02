@@ -123,6 +123,15 @@ class EventLogger:
         rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
+    def vacuum(self):
+        """Reclaim unused database space. Call periodically for maintenance."""
+        try:
+            conn = self._get_connection()
+            conn.execute("VACUUM")
+            logger.info("Database vacuumed successfully")
+        except sqlite3.Error as exc:
+            logger.error("Failed to vacuum database: %s", exc)
+
     def close(self):
         if hasattr(self._local, "connection") and self._local.connection:
             self._local.connection.close()

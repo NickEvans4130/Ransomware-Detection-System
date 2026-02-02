@@ -104,11 +104,16 @@ def get_events():
     if not _event_logger:
         return jsonify({"events": [], "total": 0})
 
-    events = _event_logger.get_events(
-        event_type=event_type,
-        since=since,
-        limit=limit + offset,
-    )
+    try:
+        events = _event_logger.get_events(
+            event_type=event_type,
+            since=since,
+            limit=limit + offset,
+        )
+    except Exception as exc:
+        logger.exception("Database error fetching events")
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
     paginated = events[offset: offset + limit]
     return jsonify({
         "events": paginated,
@@ -210,12 +215,17 @@ def get_backups():
     if not _backup_manager:
         return jsonify({"backups": [], "total": 0})
 
-    backups = _backup_manager.snapshot.get_backups(
-        original_path=original_path,
-        process_name=process_name,
-        since=since,
-        limit=limit,
-    )
+    try:
+        backups = _backup_manager.snapshot.get_backups(
+            original_path=original_path,
+            process_name=process_name,
+            since=since,
+            limit=limit,
+        )
+    except Exception as exc:
+        logger.exception("Database error fetching backups")
+        return jsonify({"error": f"Database error: {exc}"}), 500
+
     return jsonify({"backups": backups, "total": len(backups)})
 
 
@@ -239,21 +249,36 @@ def restore_files():
 
     results = []
 
-    if "backup_id" in data:
-        r = _backup_manager.recovery.restore_file(int(data["backup_id"]))
-        results = [_restore_to_dict(r)]
+    try:
+        if "backup_id" in data:
+            try:
+                bid = int(data["backup_id"])
+            except (TypeError, ValueError):
+                return jsonify({"error": "backup_id must be an integer"}), 400
+            r = _backup_manager.recovery.restore_file(bid)
+            results = [_restore_to_dict(r)]
 
-    elif "backup_ids" in data:
-        for bid in data["backup_ids"]:
-            r = _backup_manager.recovery.restore_file(int(bid))
-            results.append(_restore_to_dict(r))
+        elif "backup_ids" in data:
+            if not isinstance(data["backup_ids"], list):
+                return jsonify({"error": "backup_ids must be a list"}), 400
+            for bid in data["backup_ids"]:
+                try:
+                    bid = int(bid)
+                except (TypeError, ValueError):
+                    return jsonify({"error": f"Invalid backup_id: {bid}"}), 400
+                r = _backup_manager.recovery.restore_file(bid)
+                results.append(_restore_to_dict(r))
 
-    elif "process_name" in data:
-        rs = _backup_manager.recovery.restore_by_process(data["process_name"])
-        results = [_restore_to_dict(r) for r in rs]
+        elif "process_name" in data:
+            rs = _backup_manager.recovery.restore_by_process(data["process_name"])
+            results = [_restore_to_dict(r) for r in rs]
 
-    else:
-        return jsonify({"error": "Provide backup_id, backup_ids, or process_name"}), 400
+        else:
+            return jsonify({"error": "Provide backup_id, backup_ids, or process_name"}), 400
+
+    except Exception as exc:
+        logger.exception("Error during file restore")
+        return jsonify({"error": f"Restore failed: {exc}"}), 500
 
     if _ws_handler:
         _ws_handler.broadcast("restore", {"results": results})

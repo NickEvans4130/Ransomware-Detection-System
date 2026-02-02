@@ -26,6 +26,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+MIN_DISK_SPACE_BYTES = 100 * 1024 * 1024  # 100 MB minimum free space
+
 from src.response.backup_config import (
     DEFAULT_VAULT_PATH,
     SNAPSHOT_DIR_FORMAT,
@@ -134,6 +136,18 @@ class SnapshotService:
         if not os.path.isfile(original_path):
             logger.debug("Skipping non-file: %s", original_path)
             return None
+
+        try:
+            disk_usage = shutil.disk_usage(str(self.vault_path))
+            if disk_usage.free < MIN_DISK_SPACE_BYTES:
+                logger.error(
+                    "Insufficient disk space for backup: %d MB free, need %d MB",
+                    disk_usage.free // (1024 * 1024),
+                    MIN_DISK_SPACE_BYTES // (1024 * 1024),
+                )
+                return None
+        except OSError as exc:
+            logger.warning("Could not check disk space: %s", exc)
 
         ts = timestamp or datetime.now()
         snapshot_dir = self.vault_path / ts.strftime(SNAPSHOT_DIR_FORMAT)

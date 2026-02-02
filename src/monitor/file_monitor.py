@@ -106,6 +106,12 @@ class RansomwareEventHandler(FileSystemEventHandler):
         return old_ext.lower() != new_ext.lower()
 
     def on_created(self, event):
+        try:
+            self._handle_created(event)
+        except Exception:
+            logger.exception("Error handling created event for %s", event.src_path)
+
+    def _handle_created(self, event):
         if self._is_excluded(event.src_path):
             return
         if not event.is_directory and not self._passes_extension_filter(event.src_path):
@@ -136,6 +142,12 @@ class RansomwareEventHandler(FileSystemEventHandler):
                                event.src_path, result["entropy_after"])
 
     def on_modified(self, event):
+        try:
+            self._handle_modified(event)
+        except Exception:
+            logger.exception("Error handling modified event for %s", event.src_path)
+
+    def _handle_modified(self, event):
         if event.is_directory:
             return
         if self._is_excluded(event.src_path):
@@ -173,6 +185,12 @@ class RansomwareEventHandler(FileSystemEventHandler):
                 )
 
     def on_deleted(self, event):
+        try:
+            self._handle_deleted(event)
+        except Exception:
+            logger.exception("Error handling deleted event for %s", event.src_path)
+
+    def _handle_deleted(self, event):
         if self._is_excluded(event.src_path):
             return
         if not event.is_directory and not self._passes_extension_filter(event.src_path):
@@ -197,6 +215,12 @@ class RansomwareEventHandler(FileSystemEventHandler):
             self.entropy_detector.on_file_deleted(event.src_path)
 
     def on_moved(self, event):
+        try:
+            self._handle_moved(event)
+        except Exception:
+            logger.exception("Error handling moved event for %s", event.src_path)
+
+    def _handle_moved(self, event):
         if self._is_excluded(event.src_path) and self._is_excluded(event.dest_path):
             return
 
