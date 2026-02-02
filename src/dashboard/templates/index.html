@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ransomware Detection System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+          rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+
+<!-- Header -->
+<nav class="navbar navbar-dark bg-dark px-3">
+    <span class="navbar-brand mb-0 h1">Ransomware Detection System</span>
+    <div class="d-flex align-items-center gap-3 text-white">
+        <span id="header-status">
+            <i class="bi bi-circle-fill text-success" id="status-dot"></i>
+            <span id="status-text">Protected</span>
+        </span>
+        <span class="badge bg-secondary" id="header-threats">Threats: 0 Today</span>
+        <span class="badge bg-info" id="header-ws">
+            <i class="bi bi-broadcast"></i> <span id="ws-status">Disconnected</span>
+        </span>
+    </div>
+</nav>
+
+<!-- Status Bar -->
+<div class="bg-light border-bottom px-3 py-2 d-flex align-items-center gap-3">
+    <span class="fw-bold">Status:</span>
+    <span id="threat-level-badge" class="badge bg-success">NORMAL</span>
+    <span class="ms-auto small text-muted" id="last-updated"></span>
+</div>
+
+<!-- Tab Navigation -->
+<ul class="nav nav-tabs px-3 pt-2" id="dashboardTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="monitor-tab" data-bs-toggle="tab"
+                data-bs-target="#monitor" type="button" role="tab">
+            <i class="bi bi-activity"></i> Monitor
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="threats-tab" data-bs-toggle="tab"
+                data-bs-target="#threats" type="button" role="tab">
+            <i class="bi bi-shield-exclamation"></i> Threats
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="recovery-tab" data-bs-toggle="tab"
+                data-bs-target="#recovery" type="button" role="tab">
+            <i class="bi bi-arrow-counterclockwise"></i> Recovery
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="config-tab" data-bs-toggle="tab"
+                data-bs-target="#config" type="button" role="tab">
+            <i class="bi bi-gear"></i> Config
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="stats-tab" data-bs-toggle="tab"
+                data-bs-target="#stats" type="button" role="tab">
+            <i class="bi bi-bar-chart-line"></i> Statistics
+        </button>
+    </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content p-3" id="dashboardTabContent">
+
+    <!-- =========================================================
+         1. Real-Time Monitoring View
+         ========================================================= -->
+    <div class="tab-pane fade show active" id="monitor" role="tabpanel">
+        <div class="row g-3">
+            <!-- Live Activity Feed -->
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-rss"></i> Live Activity Feed</span>
+                        <div class="d-flex gap-2">
+                            <select id="event-type-filter" class="form-select form-select-sm"
+                                    style="width:auto">
+                                <option value="">All Types</option>
+                                <option value="created">Created</option>
+                                <option value="modified">Modified</option>
+                                <option value="deleted">Deleted</option>
+                                <option value="moved">Moved</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-secondary" id="pause-feed">
+                                <i class="bi bi-pause-fill"></i> Pause
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="event-feed" class="event-feed"></div>
+                    </div>
+                    <div class="card-footer text-muted small">
+                        Showing latest <span id="event-count">0</span> events
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health + Monitored Processes -->
+            <div class="col-lg-5">
+                <!-- System Health -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="bi bi-heart-pulse"></i> System Health
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="fs-3 fw-bold" id="health-status">--</div>
+                                <small class="text-muted">Status</small>
+                            </div>
+                            <div class="col-4">
+                                <div class="fs-3 fw-bold" id="health-threat">--</div>
+                                <small class="text-muted">Threat Level</small>
+                            </div>
+                            <div class="col-4">
+                                <div class="fs-3 fw-bold" id="health-ws">0</div>
+                                <small class="text-muted">WS Clients</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monitored Processes -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-cpu"></i> Monitored Processes</span>
+                        <span class="badge bg-secondary" id="process-count">0</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="process-list" class="list-group list-group-flush">
+                            <div class="list-group-item text-muted small">No active processes</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         2. Threat History
+         ========================================================= -->
+    <div class="tab-pane fade" id="threats" role="tabpanel">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-shield-exclamation"></i> Threat History</span>
+                <div class="d-flex gap-2">
+                    <select id="threat-severity-filter" class="form-select form-select-sm"
+                            style="width:auto">
+                        <option value="">All Severity</option>
+                        <option value="1">Level 1 - Monitor</option>
+                        <option value="2">Level 2 - Warn</option>
+                        <option value="3">Level 3 - Quarantine</option>
+                        <option value="4">Level 4 - Terminate</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-primary" id="export-threats">
+                        <i class="bi bi-download"></i> Export
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="refresh-threats">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>Process</th>
+                                <th>Score</th>
+                                <th>Level</th>
+                                <th>Escalation</th>
+                                <th>Actions</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="threat-table-body">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    No threats recorded
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Threat Detail Modal -->
+        <div class="modal fade" id="threatDetailModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Threat Details</h5>
+                        <button type="button" class="btn-close"
+                                data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="threat-detail-body"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-primary"
+                                id="export-single-threat">
+                            <i class="bi bi-download"></i> Export Report
+                        </button>
+                        <button type="button" class="btn btn-secondary"
+                                data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         3. File Recovery Interface
+         ========================================================= -->
+    <div class="tab-pane fade" id="recovery" role="tabpanel">
+        <div class="row g-3">
+            <!-- Backup Browser -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-archive"></i> Available Backups</span>
+                        <div class="d-flex gap-2">
+                            <input type="text" id="backup-search" class="form-control form-control-sm"
+                                   placeholder="Search file path..." style="width:200px">
+                            <input type="text" id="backup-process-filter" class="form-control form-control-sm"
+                                   placeholder="Filter by process..." style="width:150px">
+                            <button class="btn btn-sm btn-outline-secondary" id="refresh-backups">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th><input type="checkbox" id="select-all-backups"
+                                                   class="form-check-input"></th>
+                                        <th>File</th>
+                                        <th>Process</th>
+                                        <th>Timestamp</th>
+                                        <th>Hash</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backup-table-body">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            No backups available
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between align-items-center">
+                        <span class="small text-muted">
+                            <span id="backup-total">0</span> backups |
+                            <span id="backup-selected-count">0</span> selected
+                        </span>
+                        <button class="btn btn-sm btn-warning" id="batch-restore"
+                                disabled>
+                            <i class="bi bi-arrow-counterclockwise"></i> Restore Selected
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Restore by Process -->
+            <div class="col-lg-4">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="bi bi-arrow-counterclockwise"></i> Restore by Process
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Process Name</label>
+                            <input type="text" class="form-control" id="restore-process-name"
+                                   placeholder="e.g. suspicious.exe">
+                        </div>
+                        <button class="btn btn-warning w-100" id="restore-by-process">
+                            <i class="bi bi-arrow-counterclockwise"></i> Restore All Files
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Restore Results -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-clipboard-check"></i> Restore Results
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="restore-results" class="list-group list-group-flush">
+                            <div class="list-group-item text-muted small">
+                                No restore operations performed
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         4. Configuration Panel
+         ========================================================= -->
+    <div class="tab-pane fade" id="config" role="tabpanel">
+        <div class="row g-3">
+            <!-- Monitored Directories -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-folder"></i> Monitored Directories
+                    </div>
+                    <div class="card-body">
+                        <div id="watch-dirs-list" class="mb-3"></div>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="new-watch-dir"
+                                   placeholder="/path/to/directory">
+                            <button class="btn btn-outline-primary" id="add-watch-dir">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                        <hr>
+                        <label class="form-label fw-bold">Excluded Directories</label>
+                        <div id="exclude-dirs-list" class="mb-3"></div>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="new-exclude-dir"
+                                   placeholder="/path/to/exclude">
+                            <button class="btn btn-outline-secondary" id="add-exclude-dir">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detection Thresholds -->
+            <div class="col-lg-6">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="bi bi-sliders"></i> Detection Thresholds
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Entropy Delta Threshold:
+                                <span class="fw-bold" id="entropy-threshold-val">2.0</span>
+                            </label>
+                            <input type="range" class="form-range" id="entropy-threshold"
+                                   min="0.5" max="5.0" step="0.1" value="2.0">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox"
+                                       id="config-recursive" checked>
+                                <label class="form-check-label" for="config-recursive">
+                                    Recursive monitoring
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Response Preferences -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="bi bi-shield-check"></i> Response Preferences
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox"
+                                       id="config-safe-mode">
+                                <label class="form-check-label" for="config-safe-mode">
+                                    Safe mode (confirm before auto-actions)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Log Level</label>
+                            <select class="form-select" id="config-log-level">
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO" selected>INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Whitelist / Blacklist -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-list-check"></i> Process Whitelist
+                    </div>
+                    <div class="card-body">
+                        <div id="whitelist-list" class="mb-3"></div>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="new-whitelist"
+                                   placeholder="process_name">
+                            <button class="btn btn-outline-primary" id="add-whitelist">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="col-12">
+                <button class="btn btn-primary" id="save-config">
+                    <i class="bi bi-save"></i> Save Configuration
+                </button>
+                <span class="ms-2 text-success d-none" id="config-saved-msg">
+                    Configuration saved
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         5. Statistics Dashboard
+         ========================================================= -->
+    <div class="tab-pane fade" id="stats" role="tabpanel">
+        <div class="row g-3">
+            <!-- Summary Cards -->
+            <div class="col-sm-6 col-lg-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="fs-2 fw-bold text-primary" id="stat-events">0</div>
+                        <small class="text-muted">Events Monitored</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="fs-2 fw-bold text-danger" id="stat-threats">0</div>
+                        <small class="text-muted">Threats Blocked</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="fs-2 fw-bold text-success" id="stat-recovered">0</div>
+                        <small class="text-muted">Files Recovered</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="fs-2 fw-bold text-info" id="stat-backups">0</div>
+                        <small class="text-muted">Backups Available</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Timeline Chart -->
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up"></i> Activity Timeline
+                    </div>
+                    <div class="card-body">
+                        <canvas id="activity-chart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Threat Level Distribution -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-pie-chart"></i> Threat Distribution
+                    </div>
+                    <div class="card-body">
+                        <canvas id="threat-dist-chart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Type Breakdown -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-bar-chart"></i> Events by Type
+                    </div>
+                    <div class="card-body">
+                        <canvas id="event-type-chart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Escalation Level Breakdown -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-bar-chart-steps"></i> Escalation Levels
+                    </div>
+                    <div class="card-body">
+                        <canvas id="escalation-chart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Toast container for notifications -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

@@ -18,7 +18,7 @@ import logging
 import os
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, render_template
 from flask_sock import Sock
 
 from src.dashboard.api.routes import api, init_routes
@@ -71,7 +71,12 @@ def create_app(
     ws_handler = WebSocketHandler()
 
     # Build Flask app
-    app = Flask(__name__)
+    dashboard_dir = Path(__file__).resolve().parent
+    app = Flask(
+        __name__,
+        template_folder=str(dashboard_dir / "templates"),
+        static_folder=str(dashboard_dir / "static"),
+    )
     sock = Sock(app)
 
     # Wire routes
@@ -100,6 +105,10 @@ def create_app(
             pass
         finally:
             ws_handler.unregister(ws)
+
+    @app.route("/")
+    def index():
+        return render_template("index.html")
 
     # Store references for test access
     app.event_logger = event_logger
