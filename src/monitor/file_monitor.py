@@ -25,6 +25,9 @@ from watchdog.events import (
 
 from src.database.event_logger import EventLogger
 from src.analysis.entropy_detector import EntropyDetector
+from src.analysis.behavior_analyzer import BehaviorAnalyzer
+from src.response.backup_manager import BackupManager
+from src.response.response_engine import ResponseEngine
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +79,12 @@ class RansomwareEventHandler(FileSystemEventHandler):
 
     def __init__(self, event_logger: EventLogger, exclude_dirs: list[str] = None,
                  extension_filter: list[str] = None,
-                 entropy_detector: EntropyDetector = None):
+                 entropy_detector: EntropyDetector = None,
+                 behavior_analyzer: BehaviorAnalyzer = None):
         super().__init__()
         self.event_logger = event_logger
         self.entropy_detector = entropy_detector
+        self.behavior_analyzer = behavior_analyzer
         self.exclude_dirs = [os.path.normpath(d) for d in (exclude_dirs or [])]
         self.extension_filter = [
             ext if ext.startswith(".") else f".{ext}"
@@ -135,11 +140,23 @@ class RansomwareEventHandler(FileSystemEventHandler):
         )
         logger.info("CREATED: %s (pid=%s, %s)", event.src_path, pid, pname)
 
+        entropy_delta = None
         if not event.is_directory and self.entropy_detector:
             result = self.entropy_detector.on_file_created(event.src_path)
             if result and result["suspicious"]:
                 logger.warning("ENTROPY ALERT on create: %s (%.2f)",
                                event.src_path, result["entropy_after"])
+                entropy_delta = result.get("delta")
+
+        if not event.is_directory and self.behavior_analyzer:
+            self.behavior_analyzer.process_event(
+                event_type="created",
+                file_path=event.src_path,
+                file_extension=ext or None,
+                process_id=pid,
+                process_name=pname,
+                entropy_delta=entropy_delta,
+            )
 
     def on_modified(self, event):
         try:
@@ -175,14 +192,27 @@ class RansomwareEventHandler(FileSystemEventHandler):
         )
         logger.info("MODIFIED: %s (pid=%s, %s)", event.src_path, pid, pname)
 
+        entropy_delta = None
         if self.entropy_detector:
             result = self.entropy_detector.analyze_file(event.src_path)
-            if result and result["suspicious"]:
-                logger.warning(
-                    "ENTROPY ALERT on modify: %s (%.2f -> %.2f, delta=%.2f)",
-                    event.src_path, result["entropy_before"] or 0.0,
-                    result["entropy_after"], result["delta"],
-                )
+            if result:
+                entropy_delta = result.get("delta")
+                if result["suspicious"]:
+                    logger.warning(
+                        "ENTROPY ALERT on modify: %s (%.2f -> %.2f, delta=%.2f)",
+                        event.src_path, result["entropy_before"] or 0.0,
+                        result["entropy_after"], result["delta"],
+                    )
+
+        if self.behavior_analyzer:
+            self.behavior_analyzer.process_event(
+                event_type="modified",
+                file_path=event.src_path,
+                file_extension=ext or None,
+                process_id=pid,
+                process_name=pname,
+                entropy_delta=entropy_delta,
+            )
 
     def on_deleted(self, event):
         try:
@@ -213,6 +243,15 @@ class RansomwareEventHandler(FileSystemEventHandler):
 
         if not event.is_directory and self.entropy_detector:
             self.entropy_detector.on_file_deleted(event.src_path)
+
+        if not event.is_directory and self.behavior_analyzer:
+            self.behavior_analyzer.process_event(
+                event_type="deleted",
+                file_path=event.src_path,
+                file_extension=ext or None,
+                process_id=pid,
+                process_name=pname,
+            )
 
     def on_moved(self, event):
         try:
@@ -256,6 +295,16 @@ class RansomwareEventHandler(FileSystemEventHandler):
             event_type.upper(), event.src_path, event.dest_path, pid, pname,
         )
 
+        if not event.is_directory and self.behavior_analyzer:
+            self.behavior_analyzer.process_event(
+                event_type=event_type,
+                file_path=event.dest_path,
+                file_extension=new_ext or None,
+                old_path=event.src_path,
+                process_id=pid,
+                process_name=pname,
+            )
+
 
 class FileMonitor:
     """Manages watchdog observers for configured directories."""
@@ -270,6 +319,21 @@ class FileMonitor:
         self.entropy_detector = EntropyDetector(
             baseline_db_path=baseline_db,
             delta_threshold=delta_threshold,
+        )
+
+        # Backup and response
+        vault = self.config.get("backup", {}).get("vault_path")
+        self.backup_manager = BackupManager(vault_path=vault)
+        safe_mode = self.config.get("response", {}).get("safe_mode", False)
+        self.response_engine = ResponseEngine(
+            backup_manager=self.backup_manager,
+            safe_mode=safe_mode,
+            enable_desktop_alerts=True,
+        )
+
+        # Behavior analysis with threat callback
+        self.behavior_analyzer = BehaviorAnalyzer(
+            on_threat=lambda ts: self.response_engine.respond(ts),
         )
 
         self.observer = Observer()
@@ -294,6 +358,7 @@ class FileMonitor:
             exclude_dirs=monitor_cfg.get("exclude_directories", []),
             extension_filter=monitor_cfg.get("file_extension_filter", []),
             entropy_detector=self.entropy_detector,
+            behavior_analyzer=self.behavior_analyzer,
         )
 
         watch_dirs = monitor_cfg.get("watch_directories", [])
@@ -327,6 +392,7 @@ class FileMonitor:
             self.observer.stop()
             self.observer.join()
             self.entropy_detector.close()
+            self.backup_manager.close()
             self.event_logger.close()
             self._running = False
             logger.info("File monitor stopped.")

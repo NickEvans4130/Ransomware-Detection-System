@@ -68,6 +68,11 @@ def create_app(
             enable_desktop_alerts=False,
         )
 
+    if behavior_analyzer is None:
+        behavior_analyzer = BehaviorAnalyzer(
+            on_threat=lambda ts: response_engine.respond(ts),
+        )
+
     ws_handler = WebSocketHandler()
 
     # Build Flask app
@@ -118,3 +123,45 @@ def create_app(
     app.ws_handler = ws_handler
 
     return app
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Ransomware Detection - Web Dashboard")
+    parser.add_argument(
+        "-c", "--config",
+        default=DEFAULT_CONFIG_PATH,
+        help="Path to config.json",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        default=5000,
+        type=int,
+        help="Port to listen on (default: 5000)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("LOG_LEVEL", "INFO"),
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level",
+    )
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    app = create_app(config_path=args.config)
+    logger.info("Dashboard starting on http://%s:%d", args.host, args.port)
+    app.run(host=args.host, port=args.port, debug=False)
+
+
+if __name__ == "__main__":
+    main()

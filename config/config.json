@@ -24,6 +24,13 @@
     "database": {
         "path": "data/events.db"
     },
+    "backup": {
+        "vault_path": null
+    },
+    "response": {
+        "safe_mode": false,
+        "process_whitelist": []
+    },
     "logging": {
         "level": "INFO"
     }
