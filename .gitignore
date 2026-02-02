@@ -4,3 +4,5 @@ __pycache__/
 *.pyo
 data/*.db
 .env
+CLAUDE.md
+.claude/
