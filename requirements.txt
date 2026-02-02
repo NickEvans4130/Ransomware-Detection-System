@@ -2,3 +2,4 @@ watchdog>=3.0.0
 psutil>=5.9.0
 numpy>=1.24.0
 Flask>=3.0.0
+flask-sock>=0.7.0
