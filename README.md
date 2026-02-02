@@ -256,6 +256,33 @@ python -m src.dashboard
 
 The monitor and dashboard communicate through the shared SQLite database.
 
+### Demo Mode
+
+The system includes a built-in demo that simulates a ransomware attack through the full detection pipeline. No real malware is involved -- the demo creates temporary files in `/tmp/ransomware_demo/` and feeds synthetic events through the analysis engine.
+
+**From the dashboard:** Click the **Run Demo** button in the navbar. The demo runs four phases (normal activity, suspicious activity, ransomware attack, recovery) and you can watch events appear in the live feed, threat scores rise, and the response engine fire.
+
+**From the command line:**
+
+```bash
+# Start a demo (polls until complete)
+python -m src.demo.simulate
+
+# Run at 2x speed
+python -m src.demo.simulate --speed 2.0
+
+# Stop a running demo
+python -m src.demo.simulate --stop
+```
+
+**Demo API endpoints:**
+
+| Method | Endpoint            | Description                     |
+|--------|---------------------|---------------------------------|
+| POST   | `/api/demo/start`   | Start demo (optional `{"speed": 1.0}`) |
+| POST   | `/api/demo/stop`    | Stop a running demo             |
+| GET    | `/api/demo/status`  | Current demo status and progress |
+
 ### CLI Flags
 
 | Flag              | Applies To       | Default       | Description                    |
@@ -314,6 +341,9 @@ All endpoints are prefixed with `/api`.
 | POST   | `/api/restore`    | Restore files (`{"backup_id": 1}`, `{"backup_ids": [1,2]}`, or `{"process_name": "..."}`) |
 | GET    | `/api/config`     | Current configuration                |
 | PUT    | `/api/config`     | Update configuration (merge)         |
+| POST   | `/api/demo/start` | Start demo simulation (optional `{"speed": 1.0}`) |
+| POST   | `/api/demo/stop`  | Stop a running demo                  |
+| GET    | `/api/demo/status` | Demo status (`running`, `phase`, `progress`) |
 | WS     | `/ws/live`        | WebSocket for real-time event streaming |
 
 ### WebSocket Messages

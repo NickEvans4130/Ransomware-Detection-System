@@ -12,6 +12,7 @@ const state = {
     charts: {},
     // Track cumulative stats across sessions (reset on page load)
     statsRecovered: 0,
+    demoRunning: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -711,6 +712,54 @@ async function refreshStats() {
 }
 
 // ---------------------------------------------------------------------------
+// Demo simulation
+// ---------------------------------------------------------------------------
+
+async function toggleDemo() {
+    if (state.demoRunning) {
+        await apiPost("/demo/stop", {});
+        state.demoRunning = false;
+        updateDemoButton();
+        showToast("Demo stopped", "warning");
+    } else {
+        const data = await apiPost("/demo/start", {});
+        if (data.error) {
+            showToast("Demo: " + data.error, "danger");
+            return;
+        }
+        state.demoRunning = true;
+        updateDemoButton();
+        showToast("Demo simulation started", "info");
+    }
+}
+
+function updateDemoButton() {
+    var btn = document.getElementById("demo-btn");
+    if (!btn) return;
+    if (state.demoRunning) {
+        btn.className = "btn btn-sm btn-warning";
+        btn.innerHTML = '<i class="bi bi-stop-circle"></i> Stop Demo';
+    } else {
+        btn.className = "btn btn-sm btn-outline-warning";
+        btn.innerHTML = '<i class="bi bi-play-circle"></i> Run Demo';
+    }
+}
+
+function updateDemoState(data) {
+    if (data.phase === "complete" || data.phase === "stopped") {
+        state.demoRunning = false;
+        updateDemoButton();
+        var variant = data.phase === "complete" ? "success" : "warning";
+        showToast("Demo: " + (data.description || data.phase), variant);
+    } else {
+        state.demoRunning = true;
+        updateDemoButton();
+        showToast("Demo [" + data.phase + "] " +
+            (data.progress || 0) + "% - " + (data.description || ""), "info");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket
 // ---------------------------------------------------------------------------
 
@@ -773,6 +822,9 @@ function connectWebSocket() {
             case "config_updated":
                 showToast("Configuration updated", "info");
                 loadConfig();
+                break;
+            case "demo_status":
+                updateDemoState(msg.data);
                 break;
         }
     };
