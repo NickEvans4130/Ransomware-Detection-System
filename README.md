@@ -15,6 +15,7 @@ A behavioral ransomware detection system that monitors file system activity in r
 - [Detection Logic](#detection-logic)
 - [Response System](#response-system)
 - [Testing](#testing)
+- [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
 
@@ -222,49 +223,49 @@ The system is configured through `config/config.json`. All paths support environ
 
 ## Usage
 
-### Starting the File Monitor
+### Quick Start (Recommended)
 
-Run the monitor as a standalone process:
-
-```bash
-python -m src.monitor.file_monitor
-```
-
-With a custom config file:
+Run the unified launcher to start both the monitor and dashboard together:
 
 ```bash
-python -m src.monitor.file_monitor --config /path/to/config.json
+python run.py
 ```
 
-With debug logging:
+Open **http://localhost:5000** in your browser. The monitor watches directories in the background while the dashboard serves on the main thread.
 
 ```bash
-python -m src.monitor.file_monitor --log-level DEBUG
+# Custom port and config
+python run.py --port 8080 --config /path/to/config.json
+
+# Monitor only (no dashboard)
+python run.py --monitor-only
+
+# Dashboard only (no file monitoring)
+python run.py --dashboard-only
 ```
 
-The monitor will watch all configured directories and log events to the SQLite database. Stop it with `Ctrl+C` or `SIGTERM`.
-
-### Starting the Web Dashboard
-
-```bash
-python -m src.dashboard.app --config config/config.json
-```
-
-The dashboard starts on `http://localhost:5000` by default.
-
-### Running Both Together
-
-In separate terminals:
+### Running Components Separately
 
 ```bash
 # Terminal 1: File monitor
-python -m src.monitor.file_monitor
+python -m src.monitor
 
 # Terminal 2: Web dashboard
-python -m src.dashboard.app
+python -m src.dashboard
 ```
 
-The dashboard reads from the same SQLite database the monitor writes to, providing a live view of activity.
+The monitor and dashboard communicate through the shared SQLite database.
+
+### CLI Flags
+
+| Flag              | Applies To       | Default       | Description                    |
+|-------------------|------------------|---------------|--------------------------------|
+| `-c` / `--config` | All              | `config/config.json` | Path to configuration file |
+| `--host`          | Dashboard / run.py | `127.0.0.1` | Network interface to bind to   |
+| `--port`          | Dashboard / run.py | `5000`      | Port for the web dashboard     |
+| `--log-level`     | All              | `INFO`        | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `--monitor-only`  | run.py           | off           | Run only the file monitor      |
+| `--dashboard-only`| run.py           | off           | Run only the web dashboard     |
 
 ## Web Dashboard
 
@@ -434,6 +435,65 @@ python -m pytest tests/test_phase7_false_positives.py -v # False positive tests 
 | Recovery success rate   | 100%        | Yes      |
 | API response time       | < 50ms      | Yes      |
 
+## Deployment
+
+This system monitors local file system events and local processes, so it must run on the machine it protects. A cloud deployment is not applicable -- this is the same architecture used by commercial endpoint security tools (CrowdStrike, Windows Defender, etc.).
+
+### Linux (systemd)
+
+Run as a persistent background service that starts on login:
+
+```bash
+mkdir -p ~/.config/systemd/user
+
+cat > ~/.config/systemd/user/ransomware-detection.service << 'EOF'
+[Unit]
+Description=Ransomware Detection System
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Desktop/test
+ExecStart=%h/Desktop/test/venv/bin/python run.py --host 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable ransomware-detection
+systemctl --user start ransomware-detection
+```
+
+Keep it running after logout: `loginctl enable-linger $USER`
+
+View logs: `journalctl --user -u ransomware-detection -f`
+
+### Windows (Task Scheduler)
+
+Create a `start_monitor.bat` in the project folder, then add it to Task Scheduler with trigger "When I log on":
+
+```bat
+@echo off
+cd /d "%~dp0"
+call venv\Scripts\activate.bat
+python run.py --host 127.0.0.1
+```
+
+### Remote Dashboard Access
+
+To access the dashboard from other devices on the same network, bind to all interfaces:
+
+```bash
+python run.py --host 0.0.0.0
+```
+
+Then open `http://<machine-ip>:5000` from any device on the network. Only use this on trusted networks -- the dashboard has no authentication.
+
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md#12-deployment) for full deployment instructions including macOS launchd and split service configurations.
+
 ## Troubleshooting
 
 See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for solutions to common issues including:
@@ -459,4 +519,5 @@ Detailed phase-by-phase documentation is in the `docs/` directory:
 | [PHASE5_RESPONSE_SYSTEM.md](docs/PHASE5_RESPONSE_SYSTEM.md) | Automated four-level response |
 | [PHASE6_WEB_DASHBOARD.md](docs/PHASE6_WEB_DASHBOARD.md) | Web dashboard and API |
 | [PHASE7_TESTING.md](docs/PHASE7_TESTING.md) | Testing strategy and refinement checklist |
+| [USER_GUIDE.md](docs/USER_GUIDE.md) | Full user guide with deployment instructions |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions |

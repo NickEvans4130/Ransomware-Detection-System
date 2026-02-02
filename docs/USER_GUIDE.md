@@ -15,8 +15,9 @@ This guide walks you through setting up, configuring, and using the Ransomware D
 9. [Recovering Files](#9-recovering-files)
 10. [Tuning Detection Settings](#10-tuning-detection-settings)
 11. [Running Tests](#11-running-tests)
-12. [Troubleshooting](#12-troubleshooting)
-13. [Glossary](#13-glossary)
+12. [Deployment](#12-deployment)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Glossary](#14-glossary)
 
 ---
 
@@ -740,7 +741,199 @@ python -m pytest tests/test_phase7_false_positives.py -v
 
 ---
 
-## 12. Troubleshooting
+## 12. Deployment
+
+### Why This System Runs Locally
+
+This system cannot be deployed to a remote cloud server the way a typical web application can. It relies on two things that only exist on the machine it protects:
+
+1. **File system events** -- The watchdog library receives notifications directly from the operating system kernel when files change. These events are local to the machine where the files live.
+2. **Process information** -- The psutil library reads the local process table to identify which program made each file change. A remote server has no visibility into processes running on your computer.
+
+Deploying to a cloud platform like Heroku, Render, or AWS would result in a system that monitors an empty cloud container with no user files and no real processes. This is not a limitation of this project -- it is how all endpoint security tools work. Commercial products like CrowdStrike Falcon, Windows Defender, and Malwarebytes all run an agent directly on the machine they protect, with a dashboard for visibility.
+
+The correct deployment model is to run the system as a **persistent background service** on the machine you want to protect.
+
+### Linux: systemd Service (Recommended)
+
+systemd is the standard service manager on modern Linux distributions (Ubuntu, Fedora, Debian, etc.). A systemd user service starts automatically when you log in and stays running in the background.
+
+**Step 1: Create the service file.**
+
+Run this command, replacing the paths if your project is in a different location:
+
+```bash
+mkdir -p ~/.config/systemd/user
+
+cat > ~/.config/systemd/user/ransomware-detection.service << 'EOF'
+[Unit]
+Description=Ransomware Detection System
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Desktop/test
+ExecStart=%h/Desktop/test/venv/bin/python run.py --host 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+```
+
+`%h` is a systemd variable that expands to your home directory, so you do not need to hard-code the path.
+
+**Step 2: Enable and start the service.**
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable ransomware-detection
+systemctl --user start ransomware-detection
+```
+
+- `daemon-reload` tells systemd to read the new service file.
+- `enable` makes it start automatically on login.
+- `start` starts it immediately.
+
+**Step 3: Verify it is running.**
+
+```bash
+systemctl --user status ransomware-detection
+```
+
+You should see `Active: active (running)`. The dashboard will be available at **http://localhost:5000**.
+
+**Step 4: Keep it running after logout.**
+
+By default, systemd user services stop when you log out. To keep the service running at all times (even when no user is logged in):
+
+```bash
+loginctl enable-linger $USER
+```
+
+**Managing the service:**
+
+| Command | What It Does |
+|---------|-------------|
+| `systemctl --user status ransomware-detection` | Check if the service is running |
+| `systemctl --user stop ransomware-detection` | Stop the service |
+| `systemctl --user restart ransomware-detection` | Restart after config changes |
+| `journalctl --user -u ransomware-detection -f` | View live log output |
+| `journalctl --user -u ransomware-detection --since "1 hour ago"` | View recent logs |
+
+### Windows: Task Scheduler
+
+On Windows, you can use Task Scheduler to start the system at login.
+
+**Step 1: Create a batch file.**
+
+Create a file called `start_monitor.bat` in your project folder:
+
+```bat
+@echo off
+cd /d "%~dp0"
+call venv\Scripts\activate.bat
+python run.py --host 127.0.0.1
+```
+
+**Step 2: Add it to Task Scheduler.**
+
+1. Open Task Scheduler (search for it in the Start menu)
+2. Click **Create Basic Task**
+3. Name it "Ransomware Detection System"
+4. Trigger: **When I log on**
+5. Action: **Start a program**
+6. Program: Browse to your `start_monitor.bat` file
+7. Start in: Set to your project directory (e.g., `C:\Users\you\Desktop\test`)
+8. Check **Open the Properties dialog** and click Finish
+9. In Properties, check **Run whether user is logged on or not** if you want it always active
+
+### macOS: launchd
+
+On macOS, create a Launch Agent plist file:
+
+```bash
+cat > ~/Library/LaunchAgents/com.ransomware-detection.plist << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ransomware-detection</string>
+    <key>WorkingDirectory</key>
+    <string>$HOME/Desktop/test</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$HOME/Desktop/test/venv/bin/python</string>
+        <string>run.py</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+launchctl load ~/Library/LaunchAgents/com.ransomware-detection.plist
+```
+
+### Accessing the Dashboard from Other Devices
+
+By default, the dashboard only listens on `127.0.0.1` (localhost), which means it is only accessible from the machine it runs on. To access it from your phone, tablet, or another computer on the same network:
+
+**Step 1:** Change the host to `0.0.0.0` (all network interfaces):
+
+```bash
+python run.py --host 0.0.0.0
+```
+
+Or update the systemd service `ExecStart` line to use `--host 0.0.0.0`.
+
+**Step 2:** Find your machine's local IP address:
+
+```bash
+# Linux
+hostname -I | awk '{print $1}'
+
+# macOS
+ipconfig getifaddr en0
+
+# Windows
+ipconfig | findstr IPv4
+```
+
+**Step 3:** Open a browser on any device on the same network and go to:
+
+```
+http://<your-ip-address>:5000
+```
+
+For example, if your IP is `192.168.1.42`, go to `http://192.168.1.42:5000`.
+
+**Security note:** Only bind to `0.0.0.0` on trusted networks. The dashboard has no authentication, so anyone on the network could access it. On public or shared networks, keep the default `127.0.0.1`.
+
+### Running Monitor and Dashboard Separately
+
+In some situations you may want to run the monitor and dashboard as separate services (e.g., to restart the dashboard without interrupting monitoring). The unified `run.py` launcher supports this:
+
+```bash
+# Monitor only (no web dashboard)
+python run.py --monitor-only
+
+# Dashboard only (no file monitoring)
+python run.py --dashboard-only --port 5000
+```
+
+You can create two separate systemd services if you prefer this model. The monitor writes to the SQLite database and the dashboard reads from it -- they communicate through the shared database file, so they do not need to run in the same process.
+
+---
+
+## 13. Troubleshooting
 
 ### The Monitor Starts but Detects No Events
 
@@ -870,7 +1063,7 @@ Debug mode logs every individual event, every entropy calculation, and every sco
 
 ---
 
-## 13. Glossary
+## 14. Glossary
 
 | Term                   | Definition                                                                                  |
 |------------------------|---------------------------------------------------------------------------------------------|
