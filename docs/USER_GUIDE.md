@@ -358,6 +358,56 @@ Charts update when you switch to the tab. They provide a useful overview for und
 
 ---
 
+## 6a. Demo Mode
+
+The system includes a live demo that simulates a full ransomware attack through the detection pipeline. No real malware is used -- the demo creates temporary files and feeds synthetic events through the analysis engine so you can see the system in action.
+
+### Running the Demo from the Dashboard
+
+1. Start the dashboard: `python run.py --dashboard-only`
+2. Open your browser to **http://localhost:5000**
+3. Click the **Run Demo** button in the top navbar
+4. Watch the four phases unfold:
+   - **Normal Activity** -- Routine file operations with low entropy changes
+   - **Suspicious Activity** -- Faster modifications, some extension changes, rising threat score
+   - **Ransomware Attack** -- Mass encryption across multiple directories, high entropy spikes, threat alert fires
+   - **Recovery** -- Threat contained and files restored
+5. Events appear in the live feed, threat scores rise in the Monitor tab, and threats appear in the Threats tab
+6. Click the button again (now labelled **Stop Demo**) to end the simulation early
+
+### Running the Demo from the Command Line
+
+A standalone CLI script can trigger the demo without opening a browser:
+
+```bash
+# Start a demo and poll until complete
+python -m src.demo.simulate
+
+# Run at double speed
+python -m src.demo.simulate --speed 2.0
+
+# Connect to a dashboard on a different host/port
+python -m src.demo.simulate --base-url http://192.168.1.42:8080
+
+# Stop a running demo
+python -m src.demo.simulate --stop
+```
+
+### What the Demo Creates
+
+The demo creates a temporary directory at `/tmp/ransomware_demo/` with text files that are then "encrypted" (overwritten with random bytes) to simulate a real attack. The directory is cleaned up automatically when the demo finishes or is stopped.
+
+### Demo Phases in Detail
+
+| Phase              | Events | Entropy Delta | What Happens                            |
+|--------------------|--------|---------------|-----------------------------------------|
+| Normal Activity    | 6      | 0.1 - 0.5    | Files created and modified normally     |
+| Suspicious Activity| 10     | 0.3 - 2.5    | Faster modifications, some .txt to .enc |
+| Ransomware Attack  | 25+    | 3.5 - 4.2    | Mass encryption, .locked extensions     |
+| Recovery           | 4      | --            | Process suspended, files restored       |
+
+---
+
 ## 7. Understanding Threat Alerts
 
 When the system detects suspicious behaviour, it assigns a threat score based on six indicators. Understanding these helps you decide whether an alert is real or a false positive.
